@@ -1,0 +1,151 @@
+---
+# Two basic modes are supported: audit and scanner.
+#
+# Audit mode is recommended: it sets audit rules to the kernel and keep a
+# netlink connection open so that as soon as a rule is matched the process can
+# be moved to a control group.  This mode supports detection of running
+# applications by path, writing or reading specific files (or directories).
+# This mode consumes few resources, since program is just listening.
+#
+# Scanner mode only works for 'execute' actions.  The running processes will be
+# scanned every second, and matches, if any, will be distributed on groups.
+# Scanning is more expensive than listening to a netlink socket.  This mode is
+# recommended for those scenarios where audit rules are locked by administrator
+# (once locked, they cannot be unlocked without rebooting the machine), or the
+# Linux kernel is ancient and does not support multicast for Netlink
+#
+# Default is audit
+mode: audit
+audit:
+  # There are three audit modes (meaningless in scanner mode) that dictates how
+  # to setup the audit rules in the kernel: override, preserve and reuse
+  #
+  # * When override is used, program will delete any existing rules and leave
+  #   only the ones configured
+  #
+  # * When preserve is used, program will add its rules over whatever rule
+  #   already configured.  This is useful for coexisting with auditd.  However,
+  #   if a lot of rule rewriting rules is done, old rules are not removed. and
+  #   that can lead to surprises.
+  #
+  # * When reuse is used, no rules will be set up.  The use case if for those
+  #   scenarios where you want to configure the rules in separate runs of this
+  #   program (on run to configure rules, other to run as daemon)
+  mode: override
+
+logging:
+  # File name where logs will be written
+  file: /tmp/fetter.log
+  # Standard error levels available.  Debug shows interesting info and it is not
+  # too verbose.
+  level: info
+
+# This is the name of the cgroup path used by application (all cgroups created
+# by this program will belong to it).  Default is 'fetter'; there is no reason
+# to change it other than doing experiments or using several fetter applications
+# in parallel.
+name: fetter
+
+# These are the rules.  By default there is none; the ones below are just
+# examples.
+rules:
+  # Following rule will use a cgroup named browser for firefox.  Notice that you
+  # need to know the name of the firefox executable (if in doubt, you can figure
+  # it out by doing `ls -l /proc/PID/exe` to know the path, and 'ps -u | grep
+  # firefox' to know the PID)
+  - path: /usr/lib/firefox/firefox
+    # Supported actions are execute (the most useful one: the process executing
+    # a file will be moved to a control group), read, and write.
+    action: execute
+    # Name of the group should match one of the groups defined in their section.
+    group: browsers
+
+  # You can make several applications to share same cgroup, if you want.  That
+  # way, the limits for that cgroup apply to both at once
+  - path: /usr/lib/chromium-browser/chromium-browser
+    action: execute
+    group: browsers
+
+  - path: /usr/bin/emacs
+    action: execute
+    group: ides
+
+  - path: /my/forbidden/file
+    action: write
+    # KILL is not a real cgroup, but a way to say fetter: kill whatever process
+    # doing that action.  In this case, whenever a process writes to the file in
+    # path, process will be killed
+    group: KILL
+
+  # This is an example where a process reading a file will be frozen in place by
+  # the operating system (group honeypot has "freeze: true").  Process execution
+  # will not continue, and it cannot be killed unless removed from cgroup, or
+  # cgroup is manually thawed.  This will allow you to detect what processes
+  # read/write to a file and examine them.
+  - path: /my/forbidden/file
+    action: read
+    group: honeypot
+
+
+# These control groups will be created by the application, with the limits
+# specified for any of them.  By default there is none; the ones below are just
+# examples.
+#
+# Note that while it is safe to cap CPU to any application, capping pids and or
+# RAM might make those applications malfunction.  That would depend on how the
+# applications manage error codes of operations that are denied by operating
+# system.  Those operations would be the ones related to asking more RAM we
+# allow them to use, or trying to spawn more children.  Think of a browser that
+# uses a process-per-tab approach: if we cap processes to 20, the tab 21st would
+# fail to display correctly
+groups:
+  - name: browsers
+    # Max RAM, in Mbs, that all the processes in the group together can use.
+    ram: 2000
+    # Max number of processes that can be spawned simultaneously by processes in
+    # the group.  A process spawned by a process of a group will remain in the
+    # group.
+    pids: 30
+    # Max single-CPU %-age that processes in the group will be able to use.  For
+    # instance, if you want to make sure your massively heavy parallel local
+    # compilations do not make your UI unusable, you can create a group for
+    # 'make' with a CPU limit.  Note that if you have N CPUs, you might want to
+    # use values higher than 100.  For instance, in a machine with 8 CPUs
+    # meaningful values are those between 0 (no juice) and 800 (no limit).  A
+    # value of 400 would mean half of the CPU power would be available for other
+    # tasks.
+    cpu: 250
+    # Default is false.  true means that the group is a freezer: processes
+    # cannot continue execution or be killed by their owners (unless they are
+    # root and familiar with the freeze subsystem).  Use of this feature is to
+    # allow to detect and examine processes that do some action. Use with
+    # caution.
+    freeze: false
+    # Default is false.  true means that instead of moving the process to a
+    # cgroup the process will be killed.  It is a way of making sure (or
+    # enforcing) some actions are never done.  Use with caution.
+    kill: false
+
+  - name: ides
+    ram: 1000
+    pids: 50
+    cpu: 80
+
+  - name: email
+    ram: 2000
+    pids: 5
+    cpu: 50
+
+  - name: music
+    ram: 500
+    pids: 5
+    cpu: 80
+
+  # This example has unlimited ram, as it is not specified
+  - name: shell
+    cpu: 95
+    pids: 100
+
+  # Example of a group to freeze processes
+  - name: honeypot
+    freeze: true

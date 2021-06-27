@@ -1,0 +1,57 @@
+linters:
+  enable:
+    - bodyclose
+    - deadcode
+    - depguard
+    - dogsled
+    - dupl
+    - funlen
+    - gochecknoinits
+    - goconst
+    - gocritic
+    - gocyclo
+    - gofmt
+    - goimports
+    - revive
+    - goprintffuncname
+    - gosec
+    - gosimple
+    - govet
+    - ineffassign
+    - misspell
+    - nakedret
+    - rowserrcheck
+    - exportloopref
+    - staticcheck
+    - structcheck
+    - stylecheck
+    - typecheck
+    - unconvert
+    - unparam
+    - unused
+    - varcheck
+    - whitespace
+  disable:
+    # Some errors are just logged when found, but not checked
+    - errcheck
+issues:
+  exclude-rules:
+    - linters:
+       - revive
+      text: "don't use ALL_CAPS in Go names"
+    - linters:
+       - stylecheck
+      text: "ST1003: should not use ALL_CAPS in Go names"
+    # Exclude some linters from running on tests files.
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - dupl
+        - gosec
+        - funlen
+linters-settings:
+  funlen:
+    lines: 100
+    statements: 40
+  misspell:
+    locale: US

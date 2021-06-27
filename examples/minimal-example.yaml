@@ -1,0 +1,16 @@
+# In this example we do not allow those compilations triggered by make to use
+# more 4G RAM or 80% CPU, no matter how many parallel compilations are made
+rules:
+  - path: /usr/bin/make
+    action: execute
+    group: compilation
+
+groups:
+  - name: compilation
+    ram: 4000
+    # We do not allow compilations to use more than 80% of CPU power.  Since we
+    # have two CPUs, we need to multiply 80 per 2.
+    cpu: 160
+
+logging:
+  file: /tmp/fetter.log

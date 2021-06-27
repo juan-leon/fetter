@@ -1,0 +1,29 @@
+mode: scanner
+audit:
+  mode: reuse
+
+rules:
+  - path: /usr/bin/make
+    action: execute
+    group: compilation
+
+  - path: /usr/bin/make2
+    action: read
+    group: compilation
+
+groups:
+  - name: g1
+    ram: 100
+    cpu: 10
+    pids: 1
+
+  - name: g2
+    ram: 200
+    cpu: 20
+    freeze: true
+
+logging:
+  file: foo.log
+  level: debug
+
+name: testing-fetter

@@ -1,0 +1,11 @@
+mode: garbage
+
+rules:
+  - path: /usr/bin/make
+    action: execute
+    group: compilation
+
+groups:
+  - name: g1
+    ram: 100
+    cpu: 10

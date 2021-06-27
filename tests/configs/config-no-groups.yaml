@@ -1,0 +1,4 @@
+rules:
+  - path: /usr/bin/make
+    action: execute
+    group: compilation

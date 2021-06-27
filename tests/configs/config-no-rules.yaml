@@ -1,0 +1,4 @@
+groups:
+  - name: g1
+    ram: 100
+    cpu: 10
