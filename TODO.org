@@ -1,5 +1,0 @@
-* TODO tests
-* TODO unit tests
-* TODO docs
-* TODO badges
-* TODO CI pipeline (release, coverage)
