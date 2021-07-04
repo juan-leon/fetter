@@ -3,24 +3,39 @@ audit:
   mode: reuse
 
 rules:
-  - path: /usr/bin/make
+  r1:
+    paths:
+      - /usr/bin/make
     action: execute
-    group: compilation
+    group: g1
 
-  - path: /usr/bin/make2
+  r2:
+    paths:
+      - /usr/bin/make2
     action: read
-    group: compilation
+    group: g2
+    trigger: t2
 
 groups:
-  - name: g1
+  g1:
     ram: 100
     cpu: 10
     pids: 1
 
-  - name: g2
+  g2:
     ram: 200
     cpu: 20
     freeze: true
+
+triggers:
+  t1:
+    run: /bin/true
+    args: ['foo', 'bar']
+    user: nobody
+
+  t2:
+    run: /bin/false
+
 
 logging:
   file: foo.log

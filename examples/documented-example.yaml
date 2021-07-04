@@ -12,7 +12,10 @@
 # Scanning is more expensive than listening to a netlink socket.  This mode is
 # recommended for those scenarios where audit rules are locked by administrator
 # (once locked, they cannot be unlocked without rebooting the machine), or the
-# Linux kernel is ancient and does not support multicast for Netlink
+# Linux kernel is ancient and does not support multicast for Netlink.
+#
+# Notice that scanner mode does not work for triggering action neither detecting
+# writes/reads.
 #
 # Default is audit
 mode: audit
@@ -52,7 +55,8 @@ rules:
   # Following rule will use a cgroup named browser for firefox.  Notice that you
   # need to know the name of the firefox executable (if in doubt, you can figure
   # it out by doing `ls -l /proc/PID/exe` to know the path, and 'ps -u | grep
-  # firefox' to know the PID)
+  # firefox' to know the PID).  You can use directory names here: all
+  # executables in that directory (recursively) will be covered by the rule.
   - path: /usr/lib/firefox/firefox
     # Supported actions are execute (the most useful one: the process executing
     # a file will be moved to a control group), read, and write.
@@ -70,12 +74,18 @@ rules:
     action: execute
     group: ides
 
+  - path: /usr/bin/sudo
+    action: execute
+    # Whenever sudo is executed (from a shell or any other process), trigger
+    # 'send-mail' (defined in trigger sections) will be executed.
+    trigger: send-mail
+
   - path: /my/forbidden/file
     action: write
-    # KILL is not a real cgroup, but a way to say fetter: kill whatever process
-    # doing that action.  In this case, whenever a process writes to the file in
-    # path, process will be killed
-    group: KILL
+    # KILL is not a real trigger, but a way to say to fetter: kill whatever
+    # process doing that action.  In this case, whenever a process writes to the
+    # file in path, process will be instantly killed
+    trigger: KILL
 
   # This is an example where a process reading a file will be frozen in place by
   # the operating system (group honeypot has "freeze: true").  Process execution
@@ -99,22 +109,21 @@ rules:
 # uses a process-per-tab approach: if we cap processes to 20, the tab 21st would
 # fail to display correctly
 groups:
-  - name: browsers
+  browsers:
     # Max RAM, in Mbs, that all the processes in the group together can use.
     ram: 2000
     # Max number of processes that can be spawned simultaneously by processes in
     # the group.  A process spawned by a process of a group will remain in the
     # group.
     pids: 30
-    # Max single-CPU %-age that processes in the group will be able to use.  For
+    # Max CPU %-age that processes in the group will be able to use.  For
     # instance, if you want to make sure your massively heavy parallel local
     # compilations do not make your UI unusable, you can create a group for
-    # 'make' with a CPU limit.  Note that if you have N CPUs, you might want to
-    # use values higher than 100.  For instance, in a machine with 8 CPUs
-    # meaningful values are those between 0 (no juice) and 800 (no limit).  A
-    # value of 400 would mean half of the CPU power would be available for other
-    # tasks.
-    cpu: 250
+    # 'make' with a CPU limit.  Note that values above 100 make no sense since
+    # %-age refers to all available CPU cores.  So, if you have 4 CPUs, a 25%
+    # will allow a control group to use 100% of one of the cores (you would keep
+    # 75% of your processing power for other activities).
+    cpu: 75
     # Default is false.  true means that the group is a freezer: processes
     # cannot continue execution or be killed by their owners (unless they are
     # root and familiar with the freeze subsystem).  Use of this feature is to
@@ -126,26 +135,45 @@ groups:
     # enforcing) some actions are never done.  Use with caution.
     kill: false
 
-  - name: ides
+  ides:
     ram: 1000
     pids: 50
     cpu: 80
 
-  - name: email
+  email:
     ram: 2000
     pids: 5
-    cpu: 50
+    cpu: 40
 
-  - name: music
+  music:
     ram: 500
     pids: 5
-    cpu: 80
+    cpu: 40
 
   # This example has unlimited ram, as it is not specified
-  - name: shell
-    cpu: 95
+  shell:
+    cpu: 85
     pids: 100
 
   # Example of a group to freeze processes
-  - name: honeypot
+  honeypot:
     freeze: true
+
+# These are the trigger actions.  By default there is none; the ones below are
+# just examples.
+triggers:
+  # This is the name used in the rules section
+  send-mail:
+    # This is the tool that will be executed, in background, when rule is
+    # triggered.  Failures will be logged.
+    run: /opt/utils/send-mail.sh
+    # These are the arguments for tools above.  The tool can find additional
+    # info about the process that triggered the action by looking at the
+    # environment variables the type 'FETTER_X'.  For example, FETTER_PID will
+    # have the pid of the process that triggered the action.  See docs to see
+    # the values of X supported.
+    args: ['audit@mycompany.org', 'cto@mycompany.org']
+    # By default, the process defined by trigger will be ran as user nobody,
+    # that has little privileges.  If you want to use any other user, including
+    # root, this would be the place to declare that.
+    user: nobody

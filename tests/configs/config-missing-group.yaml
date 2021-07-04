@@ -1,10 +1,8 @@
-mode: garbage
-
 rules:
   r1:
     paths: [/usr/bin/make]
     action: execute
-    group: g1
+    group: g2
 
 groups:
   g1:

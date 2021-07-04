@@ -11,9 +11,10 @@ type Logging struct {
 }
 
 type Rule struct {
-	Path   string `config:"path,required"`
-	Action string `config:"action,required"`
-	Group  string `config:"group,required"`
+	Paths   []string `config:"paths,required"`
+	Action  string   `config:"action,required"`
+	Group   string   `config:"group"`
+	Trigger string   `config:"trigger"`
 }
 
 type Audit struct {
@@ -21,18 +22,32 @@ type Audit struct {
 }
 
 type Group struct {
-	Name   string `config:"name,required"`
-	RAM    int64  `config:"ram"`
-	CPU    int    `config:"cpu"`
-	Pids   int64  `config:"pids"`
-	Freeze bool   `group:"freeze"`
+	RAM    int64 `config:"ram"`
+	CPU    int   `config:"cpu"`
+	Pids   int64 `config:"pids"`
+	Freeze bool  `group:"freeze"`
+}
+
+type Trigger struct {
+	Run  string   `config:"run"`
+	Args []string `config:"args"`
+	User string   `config:"user"`
 }
 
 type Settings struct {
-	Logging Logging `config:"logging,required"`
-	Rules   []Rule  `config:"rules,required"`
-	Groups  []Group `config:"groups,required"`
-	Audit   Audit   `config:"audit"`
-	Name    string  `config:"name,required"`
-	Mode    string  `config:"mode,required"`
+	Logging  Logging            `config:"logging,required"`
+	Rules    map[string]Rule    `config:"rules,required"`
+	Groups   map[string]Group   `config:"groups"`
+	Triggers map[string]Trigger `config:"triggers"`
+	Audit    Audit              `config:"audit"`
+	Name     string             `config:"name,required"`
+	Mode     string             `config:"mode,required"`
+}
+
+func (s *Settings) GetGroup(rule string) string {
+	return s.Rules[rule].Group
+}
+
+func (s *Settings) GetTrigger(rule string) string {
+	return s.Rules[rule].Trigger
 }

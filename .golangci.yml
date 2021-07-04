@@ -42,6 +42,9 @@ issues:
     - linters:
        - stylecheck
       text: "ST1003: should not use ALL_CAPS in Go names"
+    - linters:
+       - gosec
+      text: "G204: Subprocess launched with function call as argument"
     # Exclude some linters from running on tests files.
     - path: _test\.go
       linters:

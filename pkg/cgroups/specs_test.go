@@ -12,7 +12,7 @@ import (
 
 func TestEmptySpec(t *testing.T) {
 	log.InitLoggerForTests()
-	spec := createSpec(&settings.Group{})
+	spec := createSpec("foo", &settings.Group{})
 	if !reflect.DeepEqual(spec, &specs.LinuxResources{}) {
 		t.Error("Should be an empty spec:", spec)
 	}
@@ -20,7 +20,7 @@ func TestEmptySpec(t *testing.T) {
 
 func TestFullSpec(t *testing.T) {
 	log.InitLoggerForTests()
-	spec := createSpec(&settings.Group{CPU: 20, RAM: 4, Pids: 789})
+	spec := createSpec("foo", &settings.Group{CPU: 20, RAM: 4, Pids: 789})
 	expected := &specs.LinuxPids{Limit: 789}
 	if !reflect.DeepEqual(spec.Pids, expected) {
 		t.Error("Pid spec", spec.Pids, "should be", expected)
@@ -31,7 +31,7 @@ func TestFullSpec(t *testing.T) {
 	if *spec.CPU.Period != uint64(1000000) {
 		t.Error("Bad cpu period")
 	}
-	if *spec.CPU.Quota != int64(200000) {
+	if *spec.CPU.Quota != int64(200000*NumCPUs) {
 		t.Error("Bad cpu quota")
 	}
 }

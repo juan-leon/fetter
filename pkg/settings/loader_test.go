@@ -14,7 +14,7 @@ func load(file string) (settings *Settings, err error) {
 func TestNotAFile(t *testing.T) {
 	_, err := load("not-a-file.yaml")
 	if err == nil {
-		t.Error("shoul fail if no file", err)
+		t.Error("should fail if no file", err)
 	}
 }
 
@@ -29,17 +29,27 @@ func TestConfigFile(t *testing.T) {
 		Name:    "testing-fetter",
 		Mode:    "scanner",
 		Audit:   Audit{Mode: "reuse"},
-		Rules: []Rule{
-			{Path: "/usr/bin/make", Action: "execute", Group: "compilation"},
-			{Path: "/usr/bin/make2", Action: "read", Group: "compilation"},
+		Rules: map[string]Rule{
+			"r1": {Paths: []string{"/usr/bin/make"}, Action: "execute", Group: "g1"},
+			"r2": {Paths: []string{"/usr/bin/make2"}, Action: "read", Group: "g2", Trigger: "t2"},
 		},
-		Groups: []Group{
-			{Name: "g1", RAM: 100, CPU: 10, Pids: 1, Freeze: false},
-			{Name: "g2", RAM: 200, CPU: 20, Pids: 0, Freeze: true},
+		Groups: map[string]Group{
+			"g1": {RAM: 100, CPU: 10, Pids: 1, Freeze: false},
+			"g2": {RAM: 200, CPU: 20, Pids: 0, Freeze: true},
+		},
+		Triggers: map[string]Trigger{
+			"t1": {Run: "/bin/true", Args: []string{"foo", "bar"}, User: "nobody"},
+			"t2": {Run: "/bin/false"},
 		},
 	}
 	if !reflect.DeepEqual(s, expected) {
-		t.Error("unexpected override names", s, expected)
+		t.Error("unexpected settings content", s, "vs", expected)
+	}
+	if s.GetGroup("r1") != "g1" {
+		t.Error("bad group for rule")
+	}
+	if s.GetTrigger("r2") != "t2" {
+		t.Error("bad trigger for rule")
 	}
 }
 
@@ -56,16 +66,7 @@ func TestUnsupportedMode(t *testing.T) {
 }
 
 func TestRequiredSections(t *testing.T) {
-	_, err := load("config-no-groups.yaml")
-	if err == nil {
-		t.Error("Loading config should fail")
-	} else {
-		expected := "required key 'groups'"
-		if !strings.Contains(err.Error(), expected) {
-			t.Error("Should complain of invalid mode", err)
-		}
-	}
-	_, err = load("config-no-rules.yaml")
+	_, err := load("config-no-rules.yaml")
 	if err == nil {
 		t.Error("Loading config should fail")
 	} else {
@@ -73,5 +74,20 @@ func TestRequiredSections(t *testing.T) {
 		if !strings.Contains(err.Error(), expected) {
 			t.Error("Should complain of invalid mode", err)
 		}
+	}
+}
+
+func TestRulesMissingTargets(t *testing.T) {
+	_, err := load("config-missing-group.yaml")
+	if err == nil {
+		t.Error("Loading config should fail")
+	} else if !strings.Contains(err.Error(), "missing group") {
+		t.Error("Should complain of Missing group", err)
+	}
+	_, err = load("config-missing-trigger.yaml")
+	if err == nil {
+		t.Error("Loading config should fail")
+	} else if !strings.Contains(err.Error(), "missing trigger") {
+		t.Error("Should complain of Missing trigger", err)
 	}
 }

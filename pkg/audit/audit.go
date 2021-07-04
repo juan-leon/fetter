@@ -17,11 +17,12 @@ import (
 	"github.com/juan-leon/fetter/pkg/cgroups"
 	"github.com/juan-leon/fetter/pkg/log"
 	"github.com/juan-leon/fetter/pkg/settings"
+	"github.com/juan-leon/fetter/pkg/triggers"
 )
 
 const (
 	auditLocked = 2
-	cgPrefix    = "cgroup_"
+	cgPrefix    = "fetter_"
 )
 
 const (
@@ -37,12 +38,13 @@ const (
 )
 
 type SysCallListener struct {
-	config  *settings.Settings
-	client  *libaudit.AuditClient
-	cgroups *cgroups.GroupHierarchy
+	config     *settings.Settings
+	client     *libaudit.AuditClient
+	procMover  cgroups.ProcessMover
+	procRunner triggers.ProcessRunner
 }
 
-func NewSysCallListener(config *settings.Settings, cgroups *cgroups.GroupHierarchy) *SysCallListener {
+func NewSysCallListener(config *settings.Settings, procMover cgroups.ProcessMover, procRunner triggers.ProcessRunner) *SysCallListener {
 	if !assertAuditMode(config.Audit.Mode) {
 		log.Logger.Errorf("unknown config for audit.mode: %s", config.Audit.Mode)
 		return nil
@@ -54,9 +56,10 @@ func NewSysCallListener(config *settings.Settings, cgroups *cgroups.GroupHierarc
 		return nil
 	}
 	return &SysCallListener{
-		client:  client,
-		config:  config,
-		cgroups: cgroups,
+		client:     client,
+		config:     config,
+		procMover:  procMover,
+		procRunner: procRunner,
 	}
 }
 
@@ -125,32 +128,38 @@ func (scl *SysCallListener) addRules() error {
 		log.Logger.Infof("Deleted %d pre-existing audit rules.", n)
 	}
 
-	for _, r := range scl.config.Rules {
-		if err = validateRule(r); err != nil {
-			log.Logger.Errorw("Failed to validate rule", "rule", r, "error", err.Error())
-			continue
-		}
-		asString := asAuditFmt(r)
+	for name, r := range scl.config.Rules {
+		scl.addRule(name, r, client)
+	}
+	return nil
+}
+
+func (scl *SysCallListener) addRule(name string, r settings.Rule, client *libaudit.AuditClient) {
+	if err := validateRule(r); err != nil {
+		log.Logger.Errorw("Failed to validate rule", "rule", r, "error", err.Error())
+		return
+	}
+	for _, path := range r.Paths {
+		asString := asAuditFmt(name, path, r.Action)
 		parsedRule, err := flags.Parse(asString)
 		if err != nil {
 			log.Logger.Errorw("Failed to parse rule", "rule", r, "error", err.Error())
-			continue
+			return
 		}
 
 		ruleData, err := rule.Build(parsedRule)
 		if err != nil {
 			log.Logger.Errorw("Failed to build rule", "rule", r, "error", err.Error())
-			continue
+			return
 		}
 
 		err = client.AddRule([]byte(ruleData))
 		if err != nil {
 			log.Logger.Errorw("Failed to add rule", "rule", r, "error", err.Error())
-			continue
+			return
 		}
-		log.Logger.Debugw("Added rule", "rule", r)
+		log.Logger.Debugw("Added path for rule", "path", path, "rule", r)
 	}
-	return nil
 }
 
 func (scl *SysCallListener) loop() {
@@ -199,9 +208,19 @@ func (scl *SysCallListener) processMessage(msg *auparse.AuditMessage) {
 			if err != nil {
 				log.Logger.Fatalf("Got a non-numeric pid %s: %s", data["pid"], err)
 			}
-			scl.cgroups.Add(pid, tagValue[len(cgPrefix):])
+			scl.processMatch(pid, tagValue[len(cgPrefix):], &data)
 			return
 		}
+	}
+}
+
+func (scl *SysCallListener) processMatch(pid int, rule string, data *map[string]string) {
+	log.Logger.Infof("Match for rule %s in pid %d", rule, pid)
+	if group := scl.config.GetGroup(rule); group != "" {
+		scl.procMover.Move(pid, group)
+	}
+	if trigger := scl.config.GetTrigger(rule); trigger != "" {
+		scl.procRunner.Run(trigger, data)
 	}
 }
 
@@ -215,29 +234,23 @@ func assertAuditMode(mode string) bool {
 	}
 }
 
-func asAuditFmt(r settings.Rule) string {
+func asAuditFmt(name, path, ruleAction string) string {
 	action := "x"
-	switch r.Action {
+	switch ruleAction {
 	case SYSCALL_READ:
 		action = "r"
 	case SYSCALL_WRITE:
 		action = "w"
 	}
-	return fmt.Sprintf(
-		"-w %s -p %s -k %s%s",
-		r.Path,
-		action,
-		cgPrefix,
-		r.Group,
-	)
+	return fmt.Sprintf("-w %s -p %s -k %s%s", path, action, cgPrefix, name)
 }
 
 func validateRule(r settings.Rule) error {
-	if r.Path == "" {
+	if len(r.Paths) < 1 {
 		return fmt.Errorf("path cannot be empty")
 	}
-	if r.Group == "" {
-		return fmt.Errorf("group cannot be empty")
+	if r.Group == "" && r.Trigger == "" {
+		return fmt.Errorf("both group and trigger cannot be empty")
 	}
 	if r.Action == "" {
 		return fmt.Errorf("action cannot be empty")

@@ -10,6 +10,7 @@ import (
 	"github.com/juan-leon/fetter/pkg/log"
 	"github.com/juan-leon/fetter/pkg/scanner"
 	"github.com/juan-leon/fetter/pkg/settings"
+	"github.com/juan-leon/fetter/pkg/triggers"
 )
 
 func Loop(
@@ -41,7 +42,7 @@ func Loop(
 		s.Loop()
 	} else {
 		log.Logger.Infof("Auditing system calls according to rules...")
-		s := audit.NewSysCallListener(config, groups)
+		s := audit.NewSysCallListener(config, groups, triggers.NewTriggerRunner(config))
 		if s == nil {
 			log.Logger.Fatalf("Could not setup a kernel syscall listener")
 		}
@@ -61,8 +62,6 @@ func Loop(
 func Clean(configFile string) {
 	config := loadConfig(configFile)
 	log.InitFileLogger(config.Logging)
-	// TODO: look for processes in sub hierarchy and send them to root
-	// hierarchy.  Otherwise the cgroups with alive processes will remain.
 	cgroups.DeleteGroupHierarchy(config)
 }
 

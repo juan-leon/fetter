@@ -1,6 +1,8 @@
 package cgroups
 
 import (
+	"runtime"
+
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 
 	"github.com/juan-leon/fetter/pkg/log"
@@ -12,8 +14,9 @@ func emptySpec() *specs.LinuxResources {
 }
 
 var period = uint64(1000000)
+var NumCPUs = runtime.NumCPU()
 
-func createSpec(g *settings.Group) (spec *specs.LinuxResources) {
+func createSpec(name string, g *settings.Group) (spec *specs.LinuxResources) {
 	spec = emptySpec()
 	if g.CPU > 0 {
 		spec.CPU = specCPU(g.CPU)
@@ -24,12 +27,12 @@ func createSpec(g *settings.Group) (spec *specs.LinuxResources) {
 	if g.Pids > 0 {
 		spec.Pids = specPids(g.Pids)
 	}
-	log.Logger.Debugw("CGroup spec created", "cgroup", g.Name, "spec", spec)
+	log.Logger.Debugw("CGroup spec created", "cgroup", name, "spec", spec)
 	return
 }
 
 func specCPU(cpu int) (spec *specs.LinuxCPU) {
-	quota := int64(uint64(cpu) * period / 100)
+	quota := int64(uint64(cpu) * period * uint64(NumCPUs) / 100)
 	spec = &specs.LinuxCPU{
 		Quota:  &quota,
 		Period: &period,

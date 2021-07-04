@@ -38,7 +38,10 @@ func InitFileLogger(config settings.Logging) {
 	cfg := zap.NewProductionEncoderConfig()
 	cfg.EncodeTime = zapcore.ISO8601TimeEncoder
 	cfg.TimeKey = "@timestamp"
-	jsonLog, _, _ := zap.Open(config.File)
+	jsonLog, _, err := zap.Open(config.File)
+	if err != nil {
+		Console.Fatalf("Failed opening log file: %s", err)
+	}
 	jsonCore := zapcore.NewCore(
 		zapcore.NewJSONEncoder(cfg),
 		zapcore.Lock(jsonLog),

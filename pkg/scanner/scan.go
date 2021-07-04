@@ -11,26 +11,29 @@ import (
 )
 
 type ProcessScanner struct {
-	config  *settings.Settings
-	ruleMap map[string]string
-	cgroups *cgroups.GroupHierarchy
+	ruleMap   map[string]string
+	procMover cgroups.ProcessMover
 }
 
-func NewProcessScanner(config *settings.Settings, cgroups *cgroups.GroupHierarchy) *ProcessScanner {
+func NewProcessScanner(config *settings.Settings, procMover cgroups.ProcessMover) *ProcessScanner {
 	ruleMap := make(map[string]string)
 	for _, r := range config.Rules {
-		if r.Action == "execute" {
-			ruleMap[r.Path] = r.Group
+		if r.Action == "execute" && r.Group != "" {
+			for _, path := range r.Paths {
+				if _, ok := ruleMap[path]; ok {
+					log.Logger.Warnf("Path %s appears in several rules; ignoring", path)
+				}
+				ruleMap[path] = r.Group
+			}
 		}
 	}
 	return &ProcessScanner{
-		config:  config,
-		ruleMap: ruleMap,
-		cgroups: cgroups,
+		ruleMap:   ruleMap,
+		procMover: procMover,
 	}
 }
 
-func (pc *ProcessScanner) Scan() {
+func (ps *ProcessScanner) Scan() {
 	processes, err := process.Processes()
 	if err != nil {
 		log.Logger.Fatalf("Cannot scan processes %s", err)
@@ -41,17 +44,17 @@ func (pc *ProcessScanner) Scan() {
 			// Typically, condition races related to short lived processes
 			continue
 		}
-		if group, ok := pc.ruleMap[exe]; ok {
+		if group, ok := ps.ruleMap[exe]; ok {
 			log.Logger.Debugf("Adding %s (pid %d) to cgroup %s", exe, p.Pid, group)
-			pc.cgroups.Add(int(p.Pid), group)
+			ps.procMover.Move(int(p.Pid), group)
 		}
 	}
 }
 
-func (pc *ProcessScanner) Loop() {
+func (ps *ProcessScanner) Loop() {
 	for {
-		pc.Scan()
-		// Scanning processes use some CPU in heavily loaded machines, but long
+		ps.Scan()
+		// Scanning processes uses some CPU in heavily loaded machines, but long
 		// delays between scans will increase the likelihood of processes
 		// spawning children that are left out the control group (for instance,
 		// a rule could be good to catch an IDE, but not its LSP subprocesses).
