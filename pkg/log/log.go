@@ -17,6 +17,7 @@ var Console zap.SugaredLogger
 // Logger is the general logger.  In daemon mode, the only logger.
 var Logger zap.SugaredLogger
 
+// InitConsoleLogger initializes the logger that wrotes to stderr.
 func InitConsoleLogger() {
 	cfg := zap.NewProductionEncoderConfig()
 	cfg.EncodeLevel = zapcore.CapitalColorLevelEncoder
@@ -29,6 +30,8 @@ func InitConsoleLogger() {
 	Console = *zap.New(core).Sugar()
 }
 
+// InitFileLogger initializes the logger that wrotes to disk.  It should be
+// called with console logger already initialized.
 func InitFileLogger(config settings.Logging) {
 	level := zap.NewAtomicLevel()
 	if err := level.UnmarshalText([]byte(config.Level)); err != nil {
@@ -38,7 +41,10 @@ func InitFileLogger(config settings.Logging) {
 	cfg := zap.NewProductionEncoderConfig()
 	cfg.EncodeTime = zapcore.ISO8601TimeEncoder
 	cfg.TimeKey = "@timestamp"
-	jsonLog, _, _ := zap.Open(config.File)
+	jsonLog, _, err := zap.Open(config.File)
+	if err != nil {
+		Console.Fatalf("Failed opening log file: %s", err)
+	}
 	jsonCore := zapcore.NewCore(
 		zapcore.NewJSONEncoder(cfg),
 		zapcore.Lock(jsonLog),
@@ -51,6 +57,8 @@ func InitFileLogger(config settings.Logging) {
 	Logger = *zap.New(core).Sugar()
 }
 
+// InitLoggerForTests initializes logger for tests.  It should be called for
+// those tests that might trigger logs to be written.
 func InitLoggerForTests() {
 	cfg := zap.NewDevelopmentConfig()
 	logger, _ := cfg.Build()

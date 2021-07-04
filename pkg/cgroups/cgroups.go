@@ -10,16 +10,16 @@ import (
 	"github.com/juan-leon/fetter/pkg/settings"
 )
 
-const (
-	kill = "KILL" // pseudo group for killing proceses outright
-)
+const kill = "KILL" // pseudo group for killing proceses outright
 
+// GroupHierarchy represents a V1 control group hierarchy
 type GroupHierarchy struct {
 	name      string
 	main      cgroups.Cgroup
 	subgroups map[string]cgroups.Cgroup
 }
 
+// NewGroupHierarchy creates and initializes a GroupHierarchy struct
 func NewGroupHierarchy(config *settings.Settings) *GroupHierarchy {
 	main, err := cgroups.New(
 		cgroups.V1,
@@ -35,12 +35,14 @@ func NewGroupHierarchy(config *settings.Settings) *GroupHierarchy {
 		main:      main,
 		subgroups: make(map[string]cgroups.Cgroup),
 	}
-	for _, g := range config.Groups {
-		gh.addSubGroup(g)
+	for name, g := range config.Groups {
+		gh.addSubGroup(name, g)
 	}
 	return &gh
 }
 
+// DeleteGroupHierarchy deletes a V1 control group hierarchy.  Processes in
+// to-be-deleted control groups will be moved to root control groups.
 func DeleteGroupHierarchy(config *settings.Settings) error {
 	main, err := cgroups.Load(
 		cgroups.V1,
@@ -50,6 +52,18 @@ func DeleteGroupHierarchy(config *settings.Settings) error {
 		log.Logger.Errorf("Could not load base cgroup with name %s: %s", config.Name, err)
 		return err
 	}
+	root, err := cgroups.Load(
+		cgroups.V1,
+		cgroups.StaticPath(""),
+	)
+	if err != nil {
+		log.Logger.Errorf("Could not load root cgroup: %s", err)
+	} else {
+		err = main.MoveTo(root)
+		if err != nil {
+			log.Logger.Errorf("Could not move all processes out of %s: %s", config.Name, err)
+		}
+	}
 	if err := main.Delete(); err != nil {
 		log.Logger.Errorf("Could not delete base cgroup with name %s: %s", config.Name, err)
 		return err
@@ -57,7 +71,9 @@ func DeleteGroupHierarchy(config *settings.Settings) error {
 	return nil
 }
 
-func (gh *GroupHierarchy) Add(pid int, cgroup string) error {
+// Move a process, identified byt its pid, to a control group, identified by its
+// name
+func (gh *GroupHierarchy) Move(pid int, cgroup string) error {
 	if cgroup == kill {
 		log.Logger.Infof("Killing process %d", pid)
 		if err := syscall.Kill(pid, 9); err != nil {
@@ -78,24 +94,24 @@ func (gh *GroupHierarchy) Add(pid int, cgroup string) error {
 	return nil
 }
 
-func (gh *GroupHierarchy) addSubGroup(g settings.Group) error {
-	if g.Name == "" {
+func (gh *GroupHierarchy) addSubGroup(name string, g settings.Group) error {
+	if name == "" {
 		err := fmt.Errorf("could not create subgroup with empty name")
 		log.Logger.Errorf("%s", err)
 		return err
 	}
-	subgroup, err := gh.main.New(g.Name, createSpec(&g))
+	subgroup, err := gh.main.New(name, createSpec(name, &g))
 	if err != nil {
-		log.Logger.Errorf("Could not create subgroup with name %s: %s", g.Name, err)
+		log.Logger.Errorf("Could not create subgroup with name %s: %s", name, err)
 		return err
 	}
-	gh.subgroups[g.Name] = subgroup
+	gh.subgroups[name] = subgroup
 	if g.Freeze {
 		if err := subgroup.Freeze(); err != nil {
-			log.Logger.Errorf("Could not freeze %s: %s", g.Name, err)
+			log.Logger.Errorf("Could not freeze %s: %s", name, err)
 			return err
 		}
 	}
-	log.Logger.Debugw("Added subgroup", "name", g.Name, "subgroup", g)
+	log.Logger.Debugw("Added subgroup", "name", name, "subgroup", g)
 	return nil
 }

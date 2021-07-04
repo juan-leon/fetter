@@ -10,8 +10,12 @@ import (
 	"github.com/juan-leon/fetter/pkg/log"
 	"github.com/juan-leon/fetter/pkg/scanner"
 	"github.com/juan-leon/fetter/pkg/settings"
+	"github.com/juan-leon/fetter/pkg/triggers"
 )
 
+// Loop implements the run subcommand.  This command never returns, unless
+// daemonize is true (the parent process will return, but the child will enter
+// in same loop)
 func Loop(
 	configFile string,
 	daemonize bool,
@@ -35,13 +39,13 @@ func Loop(
 	log.InitFileLogger(config.Logging)
 	log.Logger.Infof("Initializing Control Groups...")
 	groups := cgroups.NewGroupHierarchy(config)
-	if config.Mode == settings.RUN_MODE_SCANNER {
+	if config.Mode == settings.RunModeScanner {
 		log.Logger.Infof("Scanning active processes...")
 		s := scanner.NewProcessScanner(config, groups)
 		s.Loop()
 	} else {
 		log.Logger.Infof("Auditing system calls according to rules...")
-		s := audit.NewSysCallListener(config, groups)
+		s := audit.NewSysCallListener(config, groups, triggers.NewTriggerRunner(config))
 		if s == nil {
 			log.Logger.Fatalf("Could not setup a kernel syscall listener")
 		}
@@ -58,14 +62,14 @@ func Loop(
 	}
 }
 
+// Clean implements the clean subcommand
 func Clean(configFile string) {
 	config := loadConfig(configFile)
 	log.InitFileLogger(config.Logging)
-	// TODO: look for processes in sub hierarchy and send them to root
-	// hierarchy.  Otherwise the cgroups with alive processes will remain.
 	cgroups.DeleteGroupHierarchy(config)
 }
 
+// Scan implements the quick-run subcommand
 func Scan(configFile string) {
 	config := loadConfig(configFile)
 	log.InitFileLogger(config.Logging)

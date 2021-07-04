@@ -1,0 +1,5 @@
+rules:
+  r1:
+    paths: [/usr/bin/make]
+    action: execute
+    trigger: g2

@@ -44,7 +44,7 @@ define install_linter
 	@echo Done installing linter
 endef
 
-.PHONY: clean test toolchain linter lint
+.PHONY: clean test toolchain linter lint full-dist quick-dist
 
 
 build: $(EXEC)
@@ -54,6 +54,12 @@ $(EXEC): $(src)
 		--ldflags "-X main.Commit=$(sha) -X main.BuildDate=$(now) -X main.Version=$(version)" \
 		-o $(EXEC) \
 		github.com/juan-leon/fetter
+
+full-dist: $(src)
+	goreleaser build --rm-dist
+
+quick-dist: $(src)
+	goreleaser build --skip-validate --rm-dist --single-target
 
 clean:
 	rm -f $(EXEC)
